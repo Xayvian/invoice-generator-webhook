@@ -1,4 +1,16 @@
-const storage = require('./storage');
+const { createClient } = require('redis');
+
+let redis;
+
+async function getRedis() {
+  if (!redis) {
+    redis = createClient({
+      url: process.env.STORAGE_URL,
+    });
+    await redis.connect();
+  }
+  return redis;
+}
 
 module.exports = async (req, res) => {
   console.log('Payment check called for:', req.query.userId);
@@ -13,26 +25,26 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const payment = storage.getPaidUser(userId);
+    // Get from Redis
+    const redisClient = await getRedis();
+    const paymentDataString = await redisClient.get(`payment:${userId}`);
 
-    if (payment) {
+    if (paymentDataString) {
+      const paymentData = JSON.parse(paymentDataString);
+      console.log('Found payment in Redis:', paymentData);
       return res.status(200).json({
         hasPaid: true,
-        licenseKey: payment.licenseKey,
-        paidAt: payment.paidAt,
-        amount: payment.amount,
-        currency: payment.currency
+        licenseKey: paymentData.licenseKey,
+        paidAt: paymentData.paidAt,
+        amount: paymentData.amount,
+        currency: paymentData.currency
       });
     } else {
-      // Debug: show all stored users
-      const allUsers = storage.getAllUsers();
-      console.log('Available users:', Array.from(allUsers.keys()));
-      
+      console.log('No payment found in Redis for:', userId);
       return res.status(200).json({
         hasPaid: false,
         message: 'No payment found for this user',
-        requestedUserId: userId,
-        availableUsers: Array.from(allUsers.keys())
+        userId: userId
       });
     }
 

@@ -1,5 +1,16 @@
-const Stripe = require('stripe');
-const storage = require('./storage');
+const { createClient } = require('redis');
+
+let redis;
+
+async function getRedis() {
+  if (!redis) {
+    redis = createClient({
+      url: process.env.STORAGE_URL,
+    });
+    await redis.connect();
+  }
+  return redis;
+}
 
 module.exports = async (req, res) => {
   console.log('Webhook called:', req.method);
@@ -9,11 +20,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Skip signature verification for now - just process the event
     const event = req.body;
     console.log('Processing event:', event.type);
 
-    // Handle checkout completion
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       console.log('Checkout completed:', session.id);
@@ -22,7 +31,6 @@ module.exports = async (req, res) => {
         const userId = session.client_reference_id;
         const licenseKey = generateLicenseKey();
 
-        // Store payment data using shared storage
         const paymentData = {
           licenseKey,
           sessionId: session.id,
@@ -32,8 +40,11 @@ module.exports = async (req, res) => {
           customerEmail: session.customer_details?.email
         };
 
-        storage.setPaidUser(userId, paymentData);
-        console.log(`✅ Payment confirmed for user: ${userId}, license: ${licenseKey}`);
+        // Store in Redis
+        const redisClient = await getRedis();
+        await redisClient.set(`payment:${userId}`, JSON.stringify(paymentData));
+
+        console.log(`✅ Payment stored in Redis for user: ${userId}, license: ${licenseKey}`);
       }
     }
 

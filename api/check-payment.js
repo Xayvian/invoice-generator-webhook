@@ -1,5 +1,4 @@
-// Share the same storage as webhook
-const paidUsers = new Map();
+const storage = require('./storage');
 
 module.exports = async (req, res) => {
   console.log('Payment check called for:', req.query.userId);
@@ -14,7 +13,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const payment = paidUsers.get(userId);
+    const payment = storage.getPaidUser(userId);
 
     if (payment) {
       return res.status(200).json({
@@ -25,9 +24,15 @@ module.exports = async (req, res) => {
         currency: payment.currency
       });
     } else {
+      // Debug: show all stored users
+      const allUsers = storage.getAllUsers();
+      console.log('Available users:', Array.from(allUsers.keys()));
+      
       return res.status(200).json({
         hasPaid: false,
-        message: 'No payment found for this user'
+        message: 'No payment found for this user',
+        requestedUserId: userId,
+        availableUsers: Array.from(allUsers.keys())
       });
     }
 

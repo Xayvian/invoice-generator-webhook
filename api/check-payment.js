@@ -13,35 +13,32 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Get the blob URL from environment (Vercel sets this automatically)
-    const blobUrl = process.env.BLOB_READ_WRITE_TOKEN ? 
-      `https://${process.env.VERCEL_URL || 'your-project.vercel.app'}/api/blob/payments/${userId}.json` :
-      null;
-
-    // Try to fetch the payment data
-    if (blobUrl) {
-      const response = await fetch(blobUrl);
-      
-      if (response.ok) {
-        const paymentData = await response.json();
-        console.log('Found payment in blob:', paymentData);
-        
-        return res.status(200).json({
-          hasPaid: true,
-          licenseKey: paymentData.licenseKey,
-          paidAt: paymentData.paidAt,
-          amount: paymentData.amount,
-          currency: paymentData.currency
-        });
-      }
-    }
+    // Use the blob URL pattern from your successful webhook
+    const blobUrl = `https://ujoxpcjmmgez65np.public.blob.vercel-storage.com/payments/${userId}.json`;
     
-    // If not found or blob URL not available
-    return res.status(200).json({
-      hasPaid: false,
-      message: 'No payment found for this user',
-      userId: userId
-    });
+    console.log('Checking blob URL:', blobUrl);
+    
+    const response = await fetch(blobUrl);
+    
+    if (response.ok) {
+      const paymentData = await response.json();
+      console.log('Found payment in blob:', paymentData);
+      
+      return res.status(200).json({
+        hasPaid: true,
+        licenseKey: paymentData.licenseKey,
+        paidAt: paymentData.paidAt,
+        amount: paymentData.amount,
+        currency: paymentData.currency
+      });
+    } else {
+      console.log('No payment found, response status:', response.status);
+      return res.status(200).json({
+        hasPaid: false,
+        message: 'No payment found for this user',
+        userId: userId
+      });
+    }
 
   } catch (error) {
     console.error('Payment check error:', error);

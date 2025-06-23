@@ -1,33 +1,4 @@
-let redis;
-
-async function getRedis() {
-  if (!redis) {
-    try {
-      const { createClient } = require('redis');
-      
-      // Use the correct environment variable name
-      const redisUrl = process.env.STORAGE_REDIS_URL;
-      
-      if (!redisUrl) {
-        console.error('❌ STORAGE_REDIS_URL not found');
-        return null;
-      }
-      
-      console.log('Connecting to Redis...');
-      
-      redis = createClient({
-        url: redisUrl,
-      });
-      
-      await redis.connect();
-      console.log('✅ Redis connected successfully');
-    } catch (error) {
-      console.error('❌ Redis connection failed:', error);
-      return null;
-    }
-  }
-  return redis;
-}
+const { put } = require('@vercel/blob');
 
 module.exports = async (req, res) => {
   console.log('Webhook called:', req.method);
@@ -48,9 +19,6 @@ module.exports = async (req, res) => {
         const userId = session.client_reference_id;
         const licenseKey = generateLicenseKey();
 
-        console.log(`✅ Payment confirmed for user: ${userId}, license: ${licenseKey}`);
-
-        // Always return success even if Redis fails
         const paymentData = {
           licenseKey,
           sessionId: session.id,
@@ -60,30 +28,26 @@ module.exports = async (req, res) => {
           customerEmail: session.customer_details?.email
         };
 
-        // Try Redis with timeout
-        const redisPromise = (async () => {
-          try {
-            const redisClient = await getRedis();
-            if (redisClient) {
-              await redisClient.set(`payment:${userId}`, JSON.stringify(paymentData));
-              console.log(`✅ Payment stored in Redis for user: ${userId}`);
-            }
-          } catch (error) {
-            console.error('Redis storage failed:', error);
-          }
-        })();
-
-        // Don't wait for Redis - respond immediately
-        setTimeout(() => redisPromise, 0);
+        try {
+          // Store in your Blob storage
+          const blob = await put(`payments/${userId}.json`, JSON.stringify(paymentData), {
+            access: 'public',
+          });
+          
+          console.log(`✅ Payment stored in blob for user: ${userId}, license: ${licenseKey}`);
+          console.log(`📄 Blob URL: ${blob.url}`);
+        } catch (storageError) {
+          console.error('Blob storage failed:', storageError);
+          console.log(`⚠️ License generated but not stored: ${userId} -> ${licenseKey}`);
+        }
       }
     }
 
-    // Always return success quickly
     return res.status(200).json({ received: true });
 
   } catch (error) {
     console.error('Webhook error:', error);
-    return res.status(200).json({ received: true }); // Return success anyway
+    return res.status(500).json({ error: 'Webhook processing failed' });
   }
 };
 

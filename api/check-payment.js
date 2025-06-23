@@ -1,4 +1,4 @@
-const { head } = require('@vercel/blob');
+const { head, list } = require('@vercel/blob');
 
 module.exports = async (req, res) => {
   console.log('Payment check called for:', req.query.userId);
@@ -13,15 +13,14 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Use the blob URL pattern from your successful webhook
-    const blobUrl = `https://ujoxpcjmmgez65np.public.blob.vercel-storage.com/payments/${userId}.json`;
+    // Use Vercel Blob list to find the file
+    const { blobs } = await list({ prefix: `payments/${userId}` });
     
-    console.log('Checking blob URL:', blobUrl);
-    
-    const response = await fetch(blobUrl);
-    
-    if (response.ok) {
+    if (blobs.length > 0) {
+      // Found a payment file for this user
+      const response = await fetch(blobs[0].url);
       const paymentData = await response.json();
+      
       console.log('Found payment in blob:', paymentData);
       
       return res.status(200).json({
@@ -32,7 +31,7 @@ module.exports = async (req, res) => {
         currency: paymentData.currency
       });
     } else {
-      console.log('No payment found, response status:', response.status);
+      console.log('No payment found for:', userId);
       return res.status(200).json({
         hasPaid: false,
         message: 'No payment found for this user',
